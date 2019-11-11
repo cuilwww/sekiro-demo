@@ -3,10 +3,9 @@ package com.virjar.sekiro.weishi;
 import android.util.Log;
 
 import com.virjar.sekiro.api.SekiroClient;
-import com.virjar.sekiro.api.SekiroRequest;
-import com.virjar.sekiro.api.SekiroRequestHandler;
 import com.virjar.sekiro.api.SekiroResponse;
-import com.virjar.sekiro.api.databind.AutoBind;
+import com.virjar.sekiro.weishi.actions.GlobalSearchAllHandler;
+import com.virjar.sekiro.weishi.actions.ScreenShotHandler;
 
 import java.util.UUID;
 
@@ -19,10 +18,12 @@ import external.com.alibaba.fastjson.JSONObject;
 
 public class HookEntry implements IXposedHookLoadPackage {
     private static final String TAG = "WS_HOOK";
+    public static XC_LoadPackage.LoadPackageParam lpparam = null;
 
     @Override
     public void handleLoadPackage(final XC_LoadPackage.LoadPackageParam lpparam) throws Throwable {
 
+        HookEntry.lpparam = lpparam;
         //com.tencent.oscar.utils.network.wns.f#a(com.tencent.oscar.utils.network.d)
         XposedHelpers.findAndHookMethod("com.tencent.oscar.utils.network.wns.f", lpparam.classLoader,
                 "a", "com.tencent.oscar.utils.network.d", new XC_MethodHook() {
@@ -53,56 +54,12 @@ public class HookEntry implements IXposedHookLoadPackage {
          *
          */
 
-        final SekiroClient sekiroClient = SekiroClient.start("sekiro.virjar.com", UUID.randomUUID().toString(), "weishi-demo");
-
-        sekiroClient.registerHandler("globalSearchAll", new SekiroRequestHandler() {
-
-//            @AutoBind(require = true)
-//            private String key;
-
-//            @AutoBind
-//            private String attachInfo = "";
-
-
-            @AutoBind
-            private int searchType = 0;
-
-            @AutoBind
-            private int dataType = 0;
-
-            @Override
-            public void handleRequest(SekiroRequest sekiroRequest, SekiroResponse sekiroResponse) {
-
-                String key = sekiroRequest.getString("key");
-
-                String attachInfo = sekiroRequest.getString("attachInfo");
-                if (attachInfo == null) {
-                    attachInfo = "";
-                }
-
-                //请求id long a3 = com.tencent.weseevideo.common.utils.ar.a();
-                Class<?> arClass = XposedHelpers.findClass("com.tencent.weseevideo.common.utils.ar", lpparam.classLoader);
-                long a3 = (long) XposedHelpers.callStaticMethod(arClass, "a");
-
-                //reqeust bean
-                Class<?> seachBeanClass = XposedHelpers.findClass("com.tencent.oscar.module.discovery.ui.adapter.i", lpparam.classLoader);
-
-                Object requestBean = XposedHelpers.newInstance(seachBeanClass, a3, key, searchType, dataType, attachInfo);
-
-                //请求和响应绑定关系
-                Store.requestTaskMap.put(requestBean, sekiroResponse);
-
-                //请求发出去
-                Class<?> tinListServiceClass = XposedHelpers.findClass("com.tencent.oscar.base.service.TinListService", lpparam.classLoader);
-                Object tinListService = XposedHelpers.callStaticMethod(tinListServiceClass, "a");
-
-
-                Class<?> ERefreshPolicyEnumClass = XposedHelpers.findClass("com.tencent.oscar.base.service.TinListService$ERefreshPolicy", lpparam.classLoader);
-                Object EnumGetNetworkOnly = XposedHelpers.callStaticMethod(ERefreshPolicyEnumClass, "valueOf", "EnumGetNetworkOnly");
-
-                XposedHelpers.callMethod(tinListService, "a", requestBean, EnumGetNetworkOnly, "GlobalSearchActivity_global_search_all");
-            }
-        });
+        if (lpparam.packageName.equals(lpparam.processName)) {
+            //在主进程里面启动服务
+            final SekiroClient sekiroClient = SekiroClient.start("sekiro.virjar.com", UUID.randomUUID().toString(), "weishi-demo");
+            sekiroClient.registerHandler("globalSearchAll", new GlobalSearchAllHandler());
+            sekiroClient.registerHandler("screenShot", new ScreenShotHandler());
+        }
 
         //数据响应的时候，拦截请求
         //com.tencent.oscar.utils.network.j#a(com.tencent.oscar.utils.network.d, com.tencent.oscar.utils.network.e)
@@ -137,4 +94,5 @@ public class HookEntry implements IXposedHookLoadPackage {
                     }
                 });
     }
+
 }
